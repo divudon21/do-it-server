@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: do-it-server
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
