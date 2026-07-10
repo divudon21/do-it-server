@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 app = FastAPI()
 
-# Frontend integration ke liye CORS enable kiya he
+# Frontend web framework connectivity ke liye CORS enabled
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -27,14 +27,14 @@ BASE_HEADERS = {
 }
 
 def extract_content_id(url: str) -> str:
-    """Gofile URL se real content ID nikalne ka logic"""
+    """Gofile URL se direct Content ID nikalne ka regex core"""
     match = re.search(r"gofile\.io/d/([a-zA-Z0-9]+)", url)
     if not match:
         raise HTTPException(status_code=400, detail="Invalid Gofile URL format")
     return match.group(1)
 
 async def create_gofile_guest_token(client: httpx.AsyncClient) -> str:
-    """Real Logic: Gofile server par guest account session generate karna"""
+    """Gofile dynamic gateway par background guest session token create karna"""
     try:
         response = await client.post("https://api.gofile.io/accounts", headers=BASE_HEADERS)
         data = response.json()
@@ -49,14 +49,14 @@ async def get_stream_link(request: LinkRequest):
     content_id = extract_content_id(request.url)
     
     async with httpx.AsyncClient(timeout=15.0) as client:
-        # 1. Token nikalo
+        # 1. Active Token fetch karo
         token = await create_gofile_guest_token(client)
         
-        # 2. Token ko headers me inject karo authorize karne ke liye
+        # 2. Bearer Token authorization headers inject karo
         headers = BASE_HEADERS.copy()
         headers["Authorization"] = f"Bearer {token}"
         
-        # 3. Gofile ki internal content api se real metadata khincho
+        # 3. Gofile internal CDN cluster API hit karo
         api_url = f"https://api.gofile.io/getContents?contentId={content_id}"
         try:
             response = await client.get(api_url, headers=headers)
@@ -69,7 +69,7 @@ async def get_stream_link(request: LinkRequest):
             if not contents:
                 raise HTTPException(status_code=404, detail="No files found in this link")
             
-            # Pehli video file ka content pick karo
+            # Target video stream file information index extraction
             file_id = list(contents.keys())[0]
             file_info = contents[file_id]
             
@@ -92,4 +92,4 @@ async def get_stream_link(request: LinkRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-  
+    
