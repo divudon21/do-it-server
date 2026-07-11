@@ -1,4 +1,5 @@
 import re
+import os
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -112,4 +113,10 @@ async def proxy_stream(stream_url: str, token: str, request: Request):
             await client.aclose()
 
     return StreamingResponse(stream_generator(), status_code=resp.status_code, headers=response_headers)
+
+# Render automatically environment port pickup karega bina Gunicorn worker ke
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)
     
