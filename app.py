@@ -16,8 +16,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Render ke environment variables se token secure tarike se uthayega
-GOFILE_ACCOUNT_TOKEN = os.environ.get("GOFILE_TOKEN")
+# Render ke Environment Variables se token secure tarike se uthayega
+# Taki GitHub par open me token leak na ho
+RAW_TOKEN = os.environ.get("GOFILE_TOKEN", "")
+GOFILE_ACCOUNT_TOKEN = RAW_TOKEN.strip() if RAW_TOKEN else ""
 
 class LinkRequest(BaseModel):
     url: str
@@ -39,7 +41,10 @@ def extract_content_id(url: str) -> str:
 @app.post("/get-stream-link")
 async def get_stream_link(request: LinkRequest, req_info: Request):
     if not GOFILE_ACCOUNT_TOKEN:
-        raise HTTPException(status_code=500, detail="Render Dashboard par GOFILE_TOKEN env variable missing he!")
+        raise HTTPException(
+            status_code=500, 
+            detail="Render Dashboard par GOFILE_TOKEN env variable missing he ya khali he!"
+        )
 
     content_id = extract_content_id(request.url)
     
@@ -52,23 +57,30 @@ async def get_stream_link(request: LinkRequest, req_info: Request):
         try:
             response = await client.get(api_url, headers=headers)
             
+            # Agar Gofile direct 404 ya 401 feke toh exact screen par dikhega
             if response.status_code != 200:
-                raise HTTPException(status_code=response.status_code, detail=f"Gofile API error")
+                raise HTTPException(
+                    status_code=response.status_code, 
+                    detail=f"Gofile API directly returned status {response.status_code}. Details: {response.text[:150]}"
+                )
                 
             res_data = response.json()
             if res_data.get("status") != "ok":
-                raise HTTPException(status_code=400, detail="Gofile invalid response status")
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Gofile JSON status not ok. Full Response: {res_data}"
+                )
                 
             contents = res_data["data"]["contents"]
             if not contents:
-                raise HTTPException(status_code=404, detail="No files found")
+                raise HTTPException(status_code=404, detail="No files found inside this link folder")
             
             file_id = list(contents.keys())[0]
             file_info = contents[file_id]
             
             direct_link = file_info.get("link")
             if not direct_link:
-                raise HTTPException(status_code=500, detail="Storage node link missing")
+                raise HTTPException(status_code=500, detail="Storage node link missing in Gofile response")
             
             base_url = str(req_info.base_url).rstrip("/")
             proxy_url = f"{base_url}/proxy-stream?stream_url={direct_link}"
@@ -78,8 +90,10 @@ async def get_stream_link(request: LinkRequest, req_info: Request):
                 "file_name": file_info.get("name"),
                 "stream_url": proxy_url
             }
+        except HTTPException as he:
+            raise he
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Server Crash: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Server Crash Logic: {str(e)}")
 
 @app.get("/proxy-stream")
 async def proxy_stream(stream_url: str, request: Request):
@@ -114,4 +128,9 @@ async def proxy_stream(stream_url: str, request: Request):
             await client.aclose()
 
     return StreamingResponse(stream_generator(), status_code=resp.status_code, headers=response_headers)
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)
     
